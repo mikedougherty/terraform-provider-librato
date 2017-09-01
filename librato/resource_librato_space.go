@@ -18,6 +18,10 @@ func resourceLibratoSpace() *schema.Resource {
 		Update: resourceLibratoSpaceUpdate,
 		Delete: resourceLibratoSpaceDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": {
 				Type:     schema.TypeString,

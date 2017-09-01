@@ -22,6 +22,10 @@ func resourceLibratoSpaceChart() *schema.Resource {
 		Update: resourceLibratoSpaceChartUpdate,
 		Delete: resourceLibratoSpaceChartDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"space_id": {
 				Type:     schema.TypeInt,

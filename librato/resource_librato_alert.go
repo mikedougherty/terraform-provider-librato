@@ -21,6 +21,10 @@ func resourceLibratoAlert() *schema.Resource {
 		Update: resourceLibratoAlertUpdate,
 		Delete: resourceLibratoAlertDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": {
 				Type:     schema.TypeString,
