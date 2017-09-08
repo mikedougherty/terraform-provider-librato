@@ -20,6 +20,10 @@ func resourceLibratoService() *schema.Resource {
 		Update: resourceLibratoServiceUpdate,
 		Delete: resourceLibratoServiceDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"id": {
 				Type:     schema.TypeInt,

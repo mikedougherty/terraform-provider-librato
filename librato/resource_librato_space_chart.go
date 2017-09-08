@@ -22,6 +22,10 @@ func resourceLibratoSpaceChart() *schema.Resource {
 		Update: resourceLibratoSpaceChartUpdate,
 		Delete: resourceLibratoSpaceChartDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: resourceLibratoSpaceChartImportState,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"space_id": {
 				Type:     schema.TypeInt,
@@ -218,7 +222,7 @@ func resourceLibratoSpaceChartCreate(d *schema.ResourceData, meta interface{}) e
 	}
 
 	resource.Retry(1*time.Minute, func() *resource.RetryError {
-		_, _, err := client.Spaces.GetChart(spaceID, *spaceChartResult.ID)
+		_, _, err := SpaceChartRefreshFunc(client, spaceID, d.Id())()
 		if err != nil {
 			if errResp, ok := err.(*librato.ErrorResponse); ok && errResp.Response.StatusCode == 404 {
 				return resource.RetryableError(err)
@@ -228,20 +232,15 @@ func resourceLibratoSpaceChartCreate(d *schema.ResourceData, meta interface{}) e
 		return nil
 	})
 
-	return resourceLibratoSpaceChartReadResult(d, spaceChartResult)
+	return resourceLibratoSpaceChartReadResult(d, spaceID, spaceChartResult)
 }
 
 func resourceLibratoSpaceChartRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*librato.Client)
 
 	spaceID := uint(d.Get("space_id").(int))
+	chart, _, err := SpaceChartRefreshFunc(client, spaceID, d.Id())()
 
-	id, err := strconv.ParseUint(d.Id(), 10, 0)
-	if err != nil {
-		return err
-	}
-
-	chart, _, err := client.Spaces.GetChart(spaceID, uint(id))
 	if err != nil {
 		if errResp, ok := err.(*librato.ErrorResponse); ok && errResp.Response.StatusCode == 404 {
 			d.SetId("")
@@ -250,11 +249,17 @@ func resourceLibratoSpaceChartRead(d *schema.ResourceData, meta interface{}) err
 		return fmt.Errorf("Error reading Librato Space chart %s: %s", d.Id(), err)
 	}
 
-	return resourceLibratoSpaceChartReadResult(d, chart)
+	log.Printf("[TRACE] Got chart: space_id=%d, chartID=%s, chart=%+v\n", d.Get("space_id"), d.Id(), chart)
+	return resourceLibratoSpaceChartReadResult(d, spaceID, chart.(*librato.SpaceChart))
 }
 
-func resourceLibratoSpaceChartReadResult(d *schema.ResourceData, chart *librato.SpaceChart) error {
+func resourceLibratoSpaceChartReadResult(d *schema.ResourceData, spaceID uint, chart *librato.SpaceChart) error {
 	d.SetId(strconv.FormatUint(uint64(*chart.ID), 10))
+
+	if err := d.Set("space_id", spaceID); err != nil {
+		return err
+	}
+
 	if chart.Name != nil {
 		if err := d.Set("name", *chart.Name); err != nil {
 			return err
@@ -342,6 +347,15 @@ func resourceLibratoSpaceChartUpdate(d *schema.ResourceData, meta interface{}) e
 
 	// Just to have whole object for comparison before/after update
 	fullChart, _, err := client.Spaces.GetChart(spaceID, uint(chartID))
+
+	if err != nil {
+		if errResp, ok := err.(*librato.ErrorResponse); ok && errResp.Response.StatusCode == 404 {
+			d.SetId("")
+			return nil
+		}
+		return fmt.Errorf("Error reading Librato Space chart %s: %s", d.Id(), err)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -469,7 +483,7 @@ func resourceLibratoSpaceChartDelete(d *schema.ResourceData, meta interface{}) e
 	}
 
 	resource.Retry(1*time.Minute, func() *resource.RetryError {
-		_, _, err := client.Spaces.GetChart(spaceID, uint(id))
+		_, _, err := SpaceChartRefreshFunc(client, spaceID, d.Id())()
 		if err != nil {
 			if errResp, ok := err.(*librato.ErrorResponse); ok && errResp.Response.StatusCode == 404 {
 				return nil
@@ -481,4 +495,24 @@ func resourceLibratoSpaceChartDelete(d *schema.ResourceData, meta interface{}) e
 
 	d.SetId("")
 	return nil
+}
+
+// SpaceChartRefreshFunc returns a resource.StateRefreshFunc that is used to watch
+// a librato space chart.
+func SpaceChartRefreshFunc(client *librato.Client, spaceID uint, chartID string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		chartID, err := strconv.ParseUint(chartID, 10, 0)
+		if err != nil {
+			return nil, "", err
+		}
+
+		chart, _, err := client.Spaces.GetChart(uint(spaceID), uint(chartID))
+
+		if err != nil {
+			return nil, "", err
+		}
+
+		log.Printf("[TRACE] chart refresh chart=%+v\n", chart)
+		return chart, "exists", nil
+	}
 }

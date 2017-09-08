@@ -13,7 +13,7 @@ type SpacesService struct {
 
 // Space represents a Librato Space.
 type Space struct {
-	Name *string `json:"name"`
+	Name *string `json:"name,omitempty"`
 	ID   *uint   `json:"id,omitempty"`
 }
 
