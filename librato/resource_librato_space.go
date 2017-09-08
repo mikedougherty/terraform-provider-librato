@@ -19,7 +19,7 @@ func resourceLibratoSpace() *schema.Resource {
 		Delete: resourceLibratoSpaceDelete,
 
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			State: resourceLibratoSpaceImportState,
 		},
 
 		Schema: map[string]*schema.Schema{
@@ -63,12 +63,13 @@ func resourceLibratoSpaceCreate(d *schema.ResourceData, meta interface{}) error 
 func resourceLibratoSpaceRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*librato.Client)
 
-	id, err := strconv.ParseUint(d.Id(), 10, 0)
+	spaceID, err := strconv.ParseUint(d.Id(), 10, 0)
 	if err != nil {
 		return err
 	}
 
-	space, _, err := client.Spaces.Get(uint(id))
+	space, _, err := SpaceRefreshFunc(client, uint(spaceID))()
+
 	if err != nil {
 		if errResp, ok := err.(*librato.ErrorResponse); ok && errResp.Response.StatusCode == 404 {
 			d.SetId("")
@@ -77,7 +78,7 @@ func resourceLibratoSpaceRead(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("Error reading Librato Space %s: %s", d.Id(), err)
 	}
 
-	return resourceLibratoSpaceReadResult(d, space)
+	return resourceLibratoSpaceReadResult(d, space.(*librato.Space))
 }
 
 func resourceLibratoSpaceReadResult(d *schema.ResourceData, space *librato.Space) error {
@@ -85,8 +86,10 @@ func resourceLibratoSpaceReadResult(d *schema.ResourceData, space *librato.Space
 	if err := d.Set("id", *space.ID); err != nil {
 		return err
 	}
-	if err := d.Set("name", *space.Name); err != nil {
-		return err
+	if space.Name != nil {
+		if err := d.Set("name", *space.Name); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -140,4 +143,17 @@ func resourceLibratoSpaceDelete(d *schema.ResourceData, meta interface{}) error 
 
 	d.SetId("")
 	return nil
+}
+
+// SpaceRefreshFunc returns a resource.StateRefreshFunc that is used to watch
+// a librato space.
+func SpaceRefreshFunc(client *librato.Client, spaceID uint) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		space, _, err := client.Spaces.Get(spaceID)
+		if err != nil {
+			return nil, "", err
+		}
+
+		return space, "exists", nil
+	}
 }
