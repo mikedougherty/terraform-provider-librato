@@ -398,7 +398,7 @@ func resourceLibratoAlertUpdate(d *schema.ResourceData, meta interface{}) error 
 		if v, ok := conditionData["detect_reset"].(bool); ok {
 			condition.DetectReset = librato.Bool(v)
 		}
-		if v, ok := conditionData["duration"].(int); ok {
+		if v, ok := conditionData["duration"].(int); ok && v != 0 {
 			condition.Duration = librato.Uint(uint(v))
 		}
 		if v, ok := conditionData["summary_function"].(string); ok && v != "" {
